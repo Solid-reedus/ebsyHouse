@@ -1,63 +1,58 @@
+#include <LiquidCrystal_I2C.h>
+#include <Wire.h>
+#include <dht.h>;
+dht DHT;
 
-#define DiDiBtnBlue 3
-#define DoDoRedLed 2
+ 
+#define btnPin 3
+#define redLed 2
+#define DHT11_PIN 4
 
-int val;
-int val2;
-int buttonState;
-bool DiBtnBlueIsOn;
+byte oldPinState = HIGH;
 
-
+LiquidCrystal_I2C lcd(0x27,16,2);
 // the setup function runs once when you press reset or power the board
+
 void setup() {
   // initialize digital pin LED_BUILTIN as an output.
-  pinMode(DoRedLed, OUTPUT);
+ 
+  pinMode(btnPin, INPUT_PULLUP);
+  pinMode(redLed, OUTPUT);
+  lcd.init();
+  lcd.backlight();
+
 }
 
 // the loop function runs over and over again forever
 void loop() {
-
-
-  val = digitalRead(DiBtnBlue);
-  delay(10);
-  val2 = digitalRead(DiBtnBlue);
   
-  if(val == val2)
-  {
-    if(val != buttonState)
+  byte pinState = digitalRead(btnPin);
+  byte ledState = digitalRead(redLed);
+
+  if (pinState != oldPinState)
     {
-      if(val == LOW)
-      {
-        if(DiBtnBlueIsOn)
-        {
-          DiBtnBlueIsOn = false;
-        }
-        else
-        {
-          DiBtnBlueIsOn = true;
-        }
-      }
+    delay (10);  // debounce 
+    if (pinState == LOW)
+      digitalWrite (redLed, !digitalRead (redLed));
+    oldPinState = pinState;
     }
-    buttonState = val;
-  }
 
-
-
-
-  if(DiBtnBlueIsOn)
+  if(ledState == LOW)
   {
-    digitalWrite(DoRedLed, HIGH);  // turn the LED on (HIGH is the voltage level)
+    lcd.noBacklight();
+    return;
   }
-  else
-  {
-    digitalWrite(DoRedLed, LOW);   // turn the LED off by making the voltage LOW
-  }
+  
+    int chk = DHT.read11(DHT11_PIN);
+    lcd.display();
+    lcd.backlight();
+    lcd.setCursor(0,0);
+    lcd.print("Humidity ");
+    lcd.print(DHT.humidity, 1);
+    lcd.print("%");
 
-  /*
-  digitalWrite(DoRedLed, HIGH);  // turn the LED on (HIGH is the voltage level)
-  Serial.print(DoRedLed);
-  delay(1000);                      // wait for a second
-  digitalWrite(DoRedLed, LOW);   // turn the LED off by making the voltage LOW
-  delay(1000);      
-  */                // wait for a second
+    lcd.setCursor (0, 1);
+    lcd.print ("Temp: ");
+    lcd.print(DHT.temperature, 1);
+    lcd.print(" C");
 }

@@ -61,8 +61,8 @@ char pass[] = "Zp3Y8FKt";
 int status = WL_IDLE_STATUS;   
 
 // your server address
-//char server[] = "https://85307.hosting.ict-college.net";   
-//char postPage[] = "/projects/ebsyHouse/index.php";
+char server[] = "https://85307.hosting.ict-college.net";   
+char postPage[] = "/projects/ebsyHouse/index.php";
 
 /// vars used for timing/timeout
 unsigned long lastConnectionTime = 0;
