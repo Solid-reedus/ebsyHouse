@@ -1,26 +1,26 @@
 
-#define btnBlue 3
-#define redLed 2
+#define DiDiBtnBlue 3
+#define DoDoRedLed 2
 
 int val;
 int val2;
 int buttonState;
-bool btnBlueIsOn;
+bool DiBtnBlueIsOn;
 
 
 // the setup function runs once when you press reset or power the board
 void setup() {
   // initialize digital pin LED_BUILTIN as an output.
-  pinMode(redLed, OUTPUT);
+  pinMode(DoRedLed, OUTPUT);
 }
 
 // the loop function runs over and over again forever
 void loop() {
 
 
-  val = digitalRead(btnBlue);
+  val = digitalRead(DiBtnBlue);
   delay(10);
-  val2 = digitalRead(btnBlue);
+  val2 = digitalRead(DiBtnBlue);
   
   if(val == val2)
   {
@@ -28,13 +28,13 @@ void loop() {
     {
       if(val == LOW)
       {
-        if(btnBlueIsOn)
+        if(DiBtnBlueIsOn)
         {
-          btnBlueIsOn = false;
+          DiBtnBlueIsOn = false;
         }
         else
         {
-          btnBlueIsOn = true;
+          DiBtnBlueIsOn = true;
         }
       }
     }
@@ -44,20 +44,20 @@ void loop() {
 
 
 
-  if(btnBlueIsOn)
+  if(DiBtnBlueIsOn)
   {
-    digitalWrite(redLed, HIGH);  // turn the LED on (HIGH is the voltage level)
+    digitalWrite(DoRedLed, HIGH);  // turn the LED on (HIGH is the voltage level)
   }
   else
   {
-    digitalWrite(redLed, LOW);   // turn the LED off by making the voltage LOW
+    digitalWrite(DoRedLed, LOW);   // turn the LED off by making the voltage LOW
   }
 
   /*
-  digitalWrite(redLed, HIGH);  // turn the LED on (HIGH is the voltage level)
-  Serial.print(redLed);
+  digitalWrite(DoRedLed, HIGH);  // turn the LED on (HIGH is the voltage level)
+  Serial.print(DoRedLed);
   delay(1000);                      // wait for a second
-  digitalWrite(redLed, LOW);   // turn the LED off by making the voltage LOW
+  digitalWrite(DoRedLed, LOW);   // turn the LED off by making the voltage LOW
   delay(1000);      
   */                // wait for a second
 }
