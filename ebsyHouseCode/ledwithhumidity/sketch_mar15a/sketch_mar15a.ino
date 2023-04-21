@@ -17,8 +17,8 @@ char pass[] = "Zp3Y8FKt";
 int status = WL_IDLE_STATUS;   
 
 // your server address
-char server[] = "https://85307.hosting.ict-college.net";   
-char postPage[] = "/projects/ebsyHouse/index.php";
+char server[] = "85307.hosting.ict-college.net";   
+char postPage[] = "/projects/ebsyHouse/post.php";
 
 /// vars used for timing/timeout
 unsigned long lastConnectionTime = 0;
@@ -31,6 +31,11 @@ String content;
 #define redLed 2
 #define DHT11_PIN 4
 
+double temp;
+double hum;
+int light;
+int tempCap = 50;
+
 byte oldPinState = HIGH;
 
 LiquidCrystal_I2C lcd(0x27,16,2);
@@ -38,7 +43,7 @@ LiquidCrystal_I2C lcd(0x27,16,2);
 
 void setup() {
   // initialize digital pin LED_BUILTIN as an output.
- 
+  Serial.begin(115200); 
   pinMode(btnPin, INPUT_PULLUP);
   pinMode(redLed, OUTPUT);
   lcd.init();
@@ -47,37 +52,57 @@ void setup() {
 }
 
 // the loop function runs over and over again forever
-void loop() {
-  
+void loop() 
+{
   byte pinState = digitalRead(btnPin);
   byte ledState = digitalRead(redLed);
 
+/*
   if (pinState != oldPinState)
-    {
+  {
     delay (10);  // debounce 
     if (pinState == LOW)
+    {
       digitalWrite (redLed, !digitalRead (redLed));
-    oldPinState = pinState;
     }
-
-  if(ledState == LOW)
-  {
-    lcd.noBacklight();
-    return;
+    oldPinState = pinState;
   }
-  
-  int chk = DHT.read11(DHT11_PIN);
-  lcd.display();
-  lcd.backlight();
-  lcd.setCursor(0,0);
-  lcd.print("Humidity ");
-  lcd.print(DHT.humidity, 1);
-  lcd.print("%");
+  */
 
-  lcd.setCursor (0, 1);
-  lcd.print ("Temp: ");
-  lcd.print(DHT.temperature, 1);
-  lcd.print(" C");
+  if(readSenors == true)
+  {
+    digitalWrite(redLed, HIGH); 
+  }
+  else
+  {
+    digitalWrite(redLed, LOW);    
+  }
+
+  if(readSenors == true)
+  {
+    temp = DHT.temperature;
+    hum = DHT.humidity;
+    light = 1;
+    MakeMessege();
+
+    int chk = DHT.read11(DHT11_PIN);
+    lcd.display();
+    lcd.backlight();
+    lcd.setCursor(0,0);
+    
+    lcd.print("Humidity ");
+    lcd.print(DHT.humidity, 1);
+    lcd.print("%");
+
+    lcd.setCursor (0, 1);
+    lcd.print ("Temp: ");
+    lcd.print(DHT.temperature, 1);
+    lcd.print(" C");
+    
+  }
+
+  handleHttpPost();
+  handleHttpResponce();
 }
 
 
@@ -118,6 +143,59 @@ int processString(String strInput, String keyStart, String keyEnd)
 {
  
 }
+
+void parseString(String input)
+{
+  /*
+
+double temp;
+double hum;
+int light;
+int tempCap = 50;
+
+  */
+
+  int start = 0;
+  int end = input.indexOf("#");
+
+  while (end != -1) 
+  {
+    String substring = input.substring(start, end);
+    int starIndex = substring.indexOf("*");
+    String varName = substring.substring(0, starIndex);
+    String varValue = substring.substring(starIndex + 1);
+
+    if(varName == "temp")
+    {
+      temp = varValue.toInt();
+    }
+    else if(varName == "hum")
+    {
+      hum = varValue.toInt();
+    }
+    else if(varName == "light")
+    {
+      light = varValue.toInt();
+    }
+
+
+    start = end + 1;
+    end = input.indexOf("#", start);
+  }
+}
+
+void MakeMessege()
+{
+  String tmpString = "temperature=";
+  String humString = "&humidity=";
+  String lightString = "&light=";
+
+  content = tmpString + temp + humString + hum + lightString + light;
+
+  //rfid code
+  //content += rfidCode()
+}
+
 
 
 
@@ -208,7 +286,8 @@ int processString(String strInput, String keyStart, String keyEnd)
   |*                var: pass: wifi pass
   |*                out: nothing
   */ 
-  void SetupWifi(){
+  void SetupWifi()
+  {
 
       // serial wifi connection
     Serial1.begin(9600);
