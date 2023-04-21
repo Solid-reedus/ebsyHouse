@@ -3,7 +3,12 @@
 #include <Wire.h>
 #include "WiFiEsp.h"
 #include <dht.h>;
+#include <RFID.h>
 dht DHT;
+
+unsigned char my_rfid[] = {195,74,104,148,117};
+RFID rfid(48,49);
+
 
 WiFiEspClient client; 
 
@@ -36,6 +41,7 @@ double hum;
 int light;
 int tempCap = 50;
 
+
 byte oldPinState = HIGH;
 
 LiquidCrystal_I2C lcd(0x27,16,2);
@@ -48,7 +54,9 @@ void setup() {
   pinMode(redLed, OUTPUT);
   lcd.init();
   lcd.backlight();
+  rfid.init();
   SetupWifi();
+  
 }
 
 // the loop function runs over and over again forever
@@ -84,6 +92,7 @@ void loop()
     hum = DHT.humidity;
     light = 1;
     MakeMessege();
+    
 
     int chk = DHT.read11(DHT11_PIN);
     lcd.display();
@@ -93,13 +102,27 @@ void loop()
     lcd.print("Humidity ");
     lcd.print(DHT.humidity, 1);
     lcd.print("%");
-
     lcd.setCursor (0, 1);
     lcd.print ("Temp: ");
     lcd.print(DHT.temperature, 1);
     lcd.print(" C");
+    if(rfid.isCard()){
+      if(rfid.readCardSerial()){
+        lcd.print(rfid.serNum[0]);
+        lcd.print(".");
+        lcd.print(rfid.serNum[1]);
+        lcd.print(".");
+        lcd.print(rfid.serNum[2]);
+        lcd.print(".");
+        lcd.print(rfid.serNum[3]);
+        
+      }
+     
+      
+      rfid.selectTag(rfid.serNum);
+    }
     
-  }
+    rfid.halt();
 
   handleHttpPost();
   handleHttpResponce();
@@ -341,7 +364,3 @@ void MakeMessege()
   }
 
 #pragma endregion dontChangeCode
-
-
-
-
