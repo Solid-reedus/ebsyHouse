@@ -1,14 +1,18 @@
 
 #include <LiquidCrystal_I2C.h>
+//#include "SoftwareSerial.h"
 #include <Wire.h>
+#include <RFID.h>
 #include "WiFiEsp.h"
 #include <dht.h>;
-#include <RFID.h>
+#include "Keypad.h"
+
 dht DHT;
 
-unsigned char my_rfid[] = {195,74,104,148,117};
-RFID rfid(48,49);
+//unsigned char savedRfid[30];
 
+unsigned char SavedRfid[20];
+RFID rfid(48,49);
 
 WiFiEspClient client; 
 
@@ -16,6 +20,20 @@ WiFiEspClient client;
 long timer = 0;
 
 // WiFi Stuff
+
+const byte ROWS = 4;
+const byte COLS = 4;
+char hexaKeys[ROWS][COLS] = {
+  {'1','2','3','A'},
+  {'4','5','6','B'},
+  {'7','8','9','C'},
+  {'*','0','#','D'}
+};
+byte rowPins[ROWS] = {33, 35, 37,39}; 
+byte colPins[COLS] = {41, 43, 45, 47};
+Keypad customKeypad = Keypad( makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS); 
+
+
 
 char ssid[] = "Arduino";
 char pass[] = "Zp3Y8FKt";
@@ -31,18 +49,24 @@ unsigned long postingInterval = 5000;
 
 bool readSenors = true;
 String content;
+
+const int redPin = 24;
+const int greenPin = 23;
+const int bluePin = 22; 
  
 #define btnPin 3
 #define redLed 2
-#define DHT11_PIN 4
+#define DHT11_PIN 9
+//SoftwareSerial softserial(A9, A8); // RX, TX
+
 
 double temp;
 double hum;
-int light;
 int tempCap = 50;
+String rfidValue = "";
+String rfidWeb;
+String HexVal = "#ff00ff";
 
-
-byte oldPinState = HIGH;
 
 LiquidCrystal_I2C lcd(0x27,16,2);
 // the setup function runs once when you press reset or power the board
@@ -54,9 +78,9 @@ void setup() {
   pinMode(redLed, OUTPUT);
   lcd.init();
   lcd.backlight();
+  SPI.begin();
   rfid.init();
-  SetupWifi();
-  
+  //SetupWifi();
 }
 
 // the loop function runs over and over again forever
@@ -64,18 +88,6 @@ void loop()
 {
   byte pinState = digitalRead(btnPin);
   byte ledState = digitalRead(redLed);
-
-/*
-  if (pinState != oldPinState)
-  {
-    delay (10);  // debounce 
-    if (pinState == LOW)
-    {
-      digitalWrite (redLed, !digitalRead (redLed));
-    }
-    oldPinState = pinState;
-  }
-  */
 
   if(readSenors == true)
   {
@@ -88,26 +100,62 @@ void loop()
 
   if(readSenors == true)
   {
+
+      Display();
+  }
+  //handleHttpPost();
+  //handleHttpResponce();
+}
+
+
+
+void Display()
+{
     temp = DHT.temperature;
     hum = DHT.humidity;
-    light = 1;
     MakeMessege();
-    
+
+
+    char customKey = customKeypad.getKey();
+    if (customKey)
+    {
+      if(customKey == 65)
+      {
+        Serial.println("yo mama");
+      }
+      Serial.println(customKey);
+    }
+
+
+    //color(255,255,255);
+
 
     int chk = DHT.read11(DHT11_PIN);
     lcd.display();
     lcd.backlight();
     lcd.setCursor(0,0);
+
+
+      lcd.print("h:");
+      lcd.print(DHT.humidity, 1);
+      lcd.print("%");
+      lcd.print (" T:");
+      lcd.print(DHT.temperature, 1);
+      lcd.print("C");
     
-    lcd.print("Humidity ");
-    lcd.print(DHT.humidity, 1);
-    lcd.print("%");
-    lcd.setCursor (0, 1);
-    lcd.print ("Temp: ");
-    lcd.print(DHT.temperature, 1);
-    lcd.print(" C");
-    if(rfid.isCard()){
-      if(rfid.readCardSerial()){
+    if(rfid.isCard())
+    {
+      if(rfid.readCardSerial())
+      {
+
+        rfidValue = (String) rfid.serNum[0] 
+        + (String) rfid.serNum[1] 
+        + (String) rfid.serNum[2] 
+        + (String) rfid.serNum[3] 
+        + (String) rfid.serNum[4];
+
+
+        lcd.setCursor(0,1);
         lcd.print(rfid.serNum[0]);
         lcd.print(".");
         lcd.print(rfid.serNum[1]);
@@ -115,71 +163,52 @@ void loop()
         lcd.print(rfid.serNum[2]);
         lcd.print(".");
         lcd.print(rfid.serNum[3]);
-        
+        lcd.print(".");
+        lcd.print(rfid.serNum[4]);
       }
-     
-      
+
       rfid.selectTag(rfid.serNum);
     }
-    
     rfid.halt();
-
-  handleHttpPost();
-  handleHttpResponce();
 }
-
 
 void handleHttpResponce()
 {
   String readString; 
-  // receive incommin wifi data
-  while (client.available()) {
+  while (client.available()) 
+  {
     char c = client.read();
     readString += c;
-    //Serial.print(c); // debug only
   }
-   if (readString.length() >0) 
-   {
-   // Serial.println(readString); // debug only
+  if (readString.length() >0) 
+  {
+    Serial.print(readString);
+    parseString(readString);
 
-    /* insert your processString function to get the data form the serever
-        e.g:  int dataReceived = processString(readString, start, end);
-    */
-
-    client.stop();           // stop http client
-    readSenors = true;       // sensors can be read again
+    client.stop();
+    readSenors = true;
   } 
 }
 
 
-/* function     : (String strInput, String keyStart, String keyEnd)
-|* 
-|* Description  : Seach trough a string to find the value after keyStart and before keyEnd
-|*                e.g. strInput = LED01!DOOR04!RFID93283959235!  KeyStart = DOOR; KeyEnd = !
-|*                returns 04
-|*
-|* In/Out       : in  : String to search trough
-|*                in  : search word and end char
-|*                out : value received from server
-*/ 
-int processString(String strInput, String keyStart, String keyEnd)
+
+void hexToRGB(String hexCode)
 {
- 
+  hexCode.remove(0, 1);
+
+  int red = strtol(hexCode.substring(0, 2).c_str(), NULL, 16);
+  int green = strtol(hexCode.substring(2, 4).c_str(), NULL, 16);
+  int blue = strtol(hexCode.substring(4, 6).c_str(), NULL, 16);
+  
+  analogWrite(redPin, red); 
+  analogWrite(greenPin, green); 
+  analogWrite(bluePin, blue); 
 }
 
 void parseString(String input)
 {
-  /*
-
-double temp;
-double hum;
-int light;
-int tempCap = 50;
-
-  */
-
   int start = 0;
-  int end = input.indexOf("#");
+  int end = input.indexOf("!");
 
   while (end != -1) 
   {
@@ -188,22 +217,24 @@ int tempCap = 50;
     String varName = substring.substring(0, starIndex);
     String varValue = substring.substring(starIndex + 1);
 
-    if(varName == "temp")
+    if(varName == "rfidWeb")
     {
-      temp = varValue.toInt();
+      rfidWeb = varValue;
+      Serial.println("rfidWeb");
     }
-    else if(varName == "hum")
+    else if(varName == "tempCap")
     {
-      hum = varValue.toInt();
+      tempCap = varValue.toInt();
+      Serial.println("tempCap");
     }
-    else if(varName == "light")
+    else if(varName == "HexVal")
     {
-      light = varValue.toInt();
+      hexToRGB(varValue);
+      Serial.println("HexVal");
     }
-
 
     start = end + 1;
-    end = input.indexOf("#", start);
+    end = input.indexOf("!", start);
   }
 }
 
@@ -211,12 +242,14 @@ void MakeMessege()
 {
   String tmpString = "temperature=";
   String humString = "&humidity=";
-  String lightString = "&light=";
 
-  content = tmpString + temp + humString + hum + lightString + light;
+  content = tmpString + temp + humString + hum;
 
-  //rfid code
-  //content += rfidCode()
+  if(rfidValue != "")
+  {
+    String rfidString = "&rfidValue=";
+    content = content + rfidString + rfidValue;
+  }
 }
 
 
