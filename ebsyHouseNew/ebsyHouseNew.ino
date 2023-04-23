@@ -1,15 +1,20 @@
+/*
+made by: Andrzej Betiuk and Thom van der Vorst
+21/04/2023
+
+*/
 #include <LiquidCrystal_I2C.h>
 #include "SoftwareSerial.h"
 #include <Wire.h>
 #include <RFID.h>
 #include "WiFiEsp.h"
+#include <EEPROM.h>
 #include <dht.h>;
 #include "Keypad.h"
 dht DHT;
 
-long timer = 0;
-
-
+//these values are for the web section of the code
+//and are used to send and receive data to a specified website 
 //region webValues
   WiFiEspClient client; 
   char ssid[] = "Arduino";
@@ -27,6 +32,18 @@ long timer = 0;
   String content;
 //endregion
 
+//region buzzer
+  #define buzzer 8
+  int buzzerStatus = LOW;
+//endregion
+
+/*
+  these values are for the keypad
+  first the collums are defined and then the button placement with the char array hexaKeys
+  then the pins are defined with rowPins and colPins
+  those values are used to make a Keypad class
+  and as last 2 chars are defined that are used for the interface controls 
+*/
 //region keypad values
   const byte ROWS = 4;
   const byte COLS = 4;
@@ -41,28 +58,48 @@ long timer = 0;
   Keypad customKeypad = Keypad( makeKeymap(hexaKeys), rowPins, colPins, ROWS, COLS); 
 
   char keyPadSelectIndex = 0;
+  char SubKeyPadSelectIndex = 0;
 //endregion
 
 //region SensorValues
   double temp;
   double hum;
-  int light;
-  int tempCap = 50;
+  int humCap = 80;
+  #define DHT11_PIN 9
 //endregion
 
+/*
+  these values are used for the rfid code
+  rfidValue  = last scanned rfid
+  rfidWeb    = the rfid from the web
+  rfidEeprom = the rfid from the EEPROM
+
+  the bools rifdSameAsWeb and rfidSameAsEeprom 
+  will be true if a web or eeprom rfid is the same as scanned
+*/
 //region rfid values
   String rfidValue = "";
-  String rfidWeb;
-  String HexVal = "#ff00ff";
+  String rfidWeb = "";
+  String rfidEeprom = "";
+
+  bool rifdSameAsWeb = false;
+  bool rfidSameAsEeprom = false;  
+  //48 = pin / 49 = NRSTPD
   RFID rfid(48,49);
 //endregion
 
-//region grb led values
+//region EEPROM
+#define EEPROM_LENGTH 15
+//endregion
+
+//region rgb led values
   const int redPin = 24;
   const int greenPin = 23;
   const int bluePin = 22; 
+  String HexVal = "#ff00ff";
 //endregion
 
+//these enums are used as indexes for the interface code
 //region display enums
   enum Display 
   {
@@ -76,23 +113,20 @@ long timer = 0;
   };
 //endregion
 
-#define btnPin 3
-#define redLed 2
-#define DHT11_PIN 9
+long timer = 0;
 SoftwareSerial softserial(A9, A8); // RX, TX
-
 LiquidCrystal_I2C lcd(0x27,16,2);
 char lcdInterface[16] = " T H R W E L B ";
 
 void setup() 
 {
   Serial.begin(115200); 
-  pinMode(btnPin, INPUT_PULLUP);
-  pinMode(redLed, OUTPUT);
   lcd.init();
   lcd.backlight();
   SPI.begin();
   rfid.init();
+  ReadStringFromEEPROM(1);
+
     //SetupWifi();
 }
 
@@ -115,36 +149,36 @@ void loop()
       case TEMPERATURE:
       {
         DisplayTemp();
-        //Serial.println("TEMPERATURE");
         break;
       }
       case HUMIDITY:
       {
         DisplayHum();
-        //Serial.println("HUMIDITY");
         break;
       }
       case RFID_DISPLAY:
       {
         DisplayRfid();
-        //Serial.println("RFID_DISPLAY");
         break;
       }
       case WEB_RFID:
       {
+        DisplayWebRfid();
         break;
       }
       case EEPROM_FRID:
       {
+        DisplayEeprom();
         break;
       }
       case LED_RGB:
       {
+        DisplayRgbLed();
         break;
       }
       case BUZZER_CAP:
       {
-        DisplayBuzzerHumcap();
+        DisplayBuzzerhumCap();
         break;
       }
       default:
@@ -160,6 +194,7 @@ void loop()
     //update everything first
     UpdateDHTValues();
     Rfid();
+    CheckBuzzer();
 
     //then display
     lcd.display();
@@ -171,11 +206,141 @@ void loop()
 
     lcd.setCursor(0,1);
     lcd.print(lcdInterface);
-    //keyPadSelectIndex
+
     lcd.setCursor(keyPadSelectIndex * 2,1);
     lcd.print(">");
     lcd.setCursor(0,0);
     MakeMessege();
+  }
+
+//endregion
+
+//region buzzer
+  void CheckBuzzer()
+  {
+    if(hum > humCap)
+    {
+      buzzerStatus = HIGH;
+      digitalWrite(buzzer, HIGH);
+    }
+    else
+    {
+      buzzerStatus = LOW;
+      digitalWrite(buzzer, LOW);
+    }
+  }
+
+  void DisplayBuzzerhumCap()
+  {
+
+    switch (SubKeyPadSelectIndex)
+    {
+      case 0:
+      {
+        lcd.print("B:VAL C:CHANGE");
+        break;
+      }
+      case 1:
+      {
+        lcd.print("A:BCK ");
+        lcd.print("humCap:");
+        lcd.print(humCap);
+        break;
+      }
+      case 2:
+      {
+        changeBuzzerVal();
+        lcd.print("A:BCK 2:^ 8:v ");
+        lcd.print(humCap);
+        break;
+      }
+    }
+  }
+
+//endregion
+
+//region EEPROM
+
+  // void CheckForEprom()
+  // {
+  //     rfidEeprom = ReadStringFromEEPROM(1);
+  //   }
+  // }
+
+  void DisplayEeprom()
+  {
+    switch (SubKeyPadSelectIndex)
+    {
+      case 0:
+      {
+        lcd.print("B:VL C:CMP D:SET");
+        break;
+      }
+      case 1:
+      {
+        lcd.print("A:BCK ");
+        lcd.print("EEPROM:");
+        if(rfidEeprom == "")
+        {
+          lcd.print("NaN");
+        }
+        else
+        {
+          lcd.print(rfidEeprom);
+        }
+        break;
+      }
+      case 2:
+      {
+        lcd.print("A:BCK ");
+        lcd.print("THIS=EEP:");
+        //rework
+        lcd.print(rifdSameAsWeb);
+        break;
+      }
+      case 3:
+      {
+        lcd.print("A:BCK ");
+        lcd.print("1:CUR=EEP");
+        SetEeprom();
+        break;
+      }
+    }
+  }
+
+
+  void writeStringToEEPROM(int address) 
+  {
+    if (rfidValue.length() > EEPROM_LENGTH) 
+    {
+      rfidValue = rfidValue.substring(0, EEPROM_LENGTH);
+    }
+    
+    for (int i = 0; i < rfidValue.length(); i++) 
+    {
+      EEPROM.write(address + i, rfidValue[i]);
+    }
+    
+    EEPROM.write(address + rfidValue.length(), '\0');
+    //EEPROM.commit();
+  }
+
+  void ReadStringFromEEPROM(int address) 
+  {
+    char buffer[EEPROM_LENGTH + 1];
+    int i;
+    for (i = 0; i < EEPROM_LENGTH; i++) 
+    {
+      char c = EEPROM.read(address + i);
+      if (c == '\0') 
+      {
+        break;
+      }
+      buffer[i] = c;
+    }
+    buffer[i] = '\0';
+    rfidEeprom = String(buffer);
+    //return String(buffer);
   }
 
 
@@ -204,6 +369,7 @@ void loop()
   }
 //endregion
 
+
 //region rfid
 
   void DisplayRfid()
@@ -219,6 +385,39 @@ void loop()
     }
   }
 
+  void DisplayWebRfid()
+  {
+    switch (SubKeyPadSelectIndex)
+    {
+      case 0:
+      {
+        lcd.print("B:VAL C:COMPARE");
+        break;
+      }
+      case 1:
+      {
+        lcd.print("A:BCK ");
+        lcd.print("WEB:");
+        if(rfidValue == "")
+        {
+          lcd.print("NaN");
+        }
+        else
+        {
+          lcd.print(rfidValue);
+        }
+        break;
+      }
+      case 2:
+      {
+        lcd.print("A:BCK ");
+        lcd.print("THIS=WEB:");
+        //rework
+        lcd.print(rifdSameAsWeb);
+        break;
+      }
+    }
+  }
 
   void Rfid()
   {
@@ -227,16 +426,6 @@ void loop()
       //read rfid and if display rfid is true also display it
       if(rfid.readCardSerial())
       {
-        // lcd.print(rfid.serNum[0]);
-        // lcd.print(".");
-        // lcd.print(rfid.serNum[1]);
-        // lcd.print(".");
-        // lcd.print(rfid.serNum[2]);
-        // lcd.print(".");
-        // lcd.print(rfid.serNum[3]);
-        // lcd.print(".");
-        // lcd.print(rfid.serNum[4]);
-
         rfidValue = (String) rfid.serNum[0] 
           + (String) rfid.serNum[1] 
           + (String) rfid.serNum[2] 
@@ -248,6 +437,7 @@ void loop()
     rfid.halt();
   }
 //endregion
+
 
 //region rgb led
   void hexToRGB(String hexCode)
@@ -262,49 +452,93 @@ void loop()
     analogWrite(greenPin, green); 
     analogWrite(bluePin, blue); 
   }
-//endregion
 
-
-//region buzzer
-  void DisplayBuzzerHumcap()
+  void DisplayRgbLed()
   {
-    lcd.print("tempCap:");
-    lcd.print(tempCap);
+    lcd.print("hex code:");
+    lcd.print(HexVal);
   }
-
+  
 //endregion
+
 
 //region keyPad
 
+  void changeBuzzerVal()
+  {
+    char customKey = customKeypad.getKey();
+    if(customKey == '2' && humCap < 90)
+    {
+      humCap += 10;
+    }
+    else if(customKey == '8' && humCap > 10)
+    {
+      humCap -= 10;
+    }
+  }
+
+    void SetEeprom()
+    {
+      char customKey = customKeypad.getKey();
+      if(customKey == '1' && rfidValue != "")
+      {
+        writeStringToEEPROM(1);
+      }
+    }
+
   void ReadKeyPadInput()
   {
-    /*
-      0 = 48
-      1 = 49
-      2 = 50
-      ect
-      9 = 57
-      A = 65
-      B = 66
-      C = 67
-    */
     char customKey = customKeypad.getKey();
     if (customKey)
     {
-      if(customKey == 52)
+      switch (customKey) 
       {
-        keyPadSelectIndex--;
-        lcd.clear();
-      }
-      if(customKey == 54)
-      {
-        keyPadSelectIndex++;
-        //Serial.println(keyPadSelectIndex);
-        lcd.clear();
-        //Serial.println("big chungus");
-        //lcdInterface
+        case '4':
+        {
+          if(keyPadSelectIndex > 0)
+          {
+            keyPadSelectIndex--;
+            SubKeyPadSelectIndex = 0;
+          }
+          break;
+        }
+        case '6':
+        {
+          if(keyPadSelectIndex < 6)
+          {
+            keyPadSelectIndex++;
+            SubKeyPadSelectIndex = 0;
+            lcd.clear();
+          }
+          break;
+        }
+        case 'A':
+        {
+          SubKeyPadSelectIndex = 0;
+          break;
+        }
+        case 'B':
+        {
+          SubKeyPadSelectIndex = 1;
+          break;
+        }
+        case 'C':
+        {
+          SubKeyPadSelectIndex = 2;
+          break;
+        }
+        case 'D':
+        {
+          SubKeyPadSelectIndex = 3;
+          break;
+        }
+        default:
+        {
+          break;
+        }
       }
       Serial.println(customKey);
+      lcd.clear();
     }
   }
 
@@ -331,13 +565,14 @@ void loop()
         rfidWeb = varValue;
         Serial.println("rfidWeb");
       }
-      else if(varName == "tempCap")
+      else if(varName == "humCap")
       {
-        tempCap = varValue.toInt();
-        Serial.println("tempCap");
+        humCap = varValue.toInt();
+        Serial.println("humCap");
       }
       else if(varName == "HexVal")
       {
+        HexVal = varValue;
         hexToRGB(varValue);
         Serial.println("HexVal");
       }
