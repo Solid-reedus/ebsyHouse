@@ -80,7 +80,6 @@ dht DHT;
 //region rfid values
   String rfidValue = "";
   String rfidWeb = "";
-  String rfidEeprom = "";
 
   bool rifdSameAsWeb = false;
   bool rfidSameAsEeprom = false;  
@@ -89,7 +88,8 @@ dht DHT;
 //endregion
 
 //region EEPROM
-#define EEPROM_LENGTH 15
+  #define EEPROM_LENGTH 15
+  String rfidEeprom = "";
 //endregion
 
 //region rgb led values
@@ -113,10 +113,14 @@ dht DHT;
   };
 //endregion
 
+// variables for user functions
 long timer = 0;
-SoftwareSerial softserial(A9, A8); // RX, TX
-LiquidCrystal_I2C lcd(0x27,16,2);
-char lcdInterface[16] = " T H R W E L B ";
+SoftwareSerial softserial(A9, A8);
+
+//region lcd
+  LiquidCrystal_I2C lcd(0x27,16,2);
+  char lcdInterface[16] = " T H R W E L B ";
+//endregion
 
 void setup() 
 {
@@ -125,9 +129,7 @@ void setup()
   lcd.backlight();
   SPI.begin();
   rfid.init();
-  ReadStringFromEEPROM(1);
-
-    //SetupWifi();
+  SetupWifi();
 }
 
 void loop() 
@@ -136,12 +138,14 @@ void loop()
   {
     Displayhouse();
   }
-  //handleHttpPost();
-  //handleHttpResponce();
+  handleHttpPost();
+  handleHttpResponce();
 }
 
 //region display
 
+  //this code will decide what will be displayed based on the value of keyPadSelectIndex
+  //the display code will display difrent things based on the keypad code
   void WhatToDisplay()
   {
     switch (keyPadSelectIndex) 
@@ -190,32 +194,39 @@ void loop()
 
   void Displayhouse()
   {
+    //first the code will check and update all the values
     ReadKeyPadInput();
-    //update everything first
     UpdateDHTValues();
     Rfid();
     CheckBuzzer();
+    CompareRfid();
+    ReadStringFromEEPROM(1);
 
-    //then display
+    //then all the code will be displayed
     lcd.display();
     lcd.backlight();
-
+    // the UI is displayed using WhatToDisplay
     WhatToDisplay();
-
     lcd.setCursor(0,0);
 
     lcd.setCursor(0,1);
     lcd.print(lcdInterface);
 
+    //for the user to know where he is in the UI a cursor is displayed
     lcd.setCursor(keyPadSelectIndex * 2,1);
     lcd.print(">");
     lcd.setCursor(0,0);
+    //this code will update the messege that will be send to the website
     MakeMessege();
   }
 
 //endregion
 
+
 //region buzzer
+
+  //this code checks if the humidity is higher then its cap and if so
+  //will activate the buzzer 
   void CheckBuzzer()
   {
     if(hum > humCap)
@@ -230,9 +241,9 @@ void loop()
     }
   }
 
+  //this is the UI code of the buzzer to be able to interact with the buzzer
   void DisplayBuzzerhumCap()
   {
-
     switch (SubKeyPadSelectIndex)
     {
       case 0:
@@ -249,6 +260,8 @@ void loop()
       }
       case 2:
       {
+        //changeBuzzerVal will change the humCap value 
+        //by pressing 2 (-10) or 8 (+10)  
         changeBuzzerVal();
         lcd.print("A:BCK 2:^ 8:v ");
         lcd.print(humCap);
@@ -259,13 +272,8 @@ void loop()
 
 //endregion
 
-//region EEPROM
 
-  // void CheckForEprom()
-  // {
-  //     rfidEeprom = ReadStringFromEEPROM(1);
-  //   }
-  // }
+//region EEPROM
 
   void DisplayEeprom()
   {
@@ -294,8 +302,7 @@ void loop()
       {
         lcd.print("A:BCK ");
         lcd.print("THIS=EEP:");
-        //rework
-        lcd.print(rifdSameAsWeb);
+        lcd.print(rfidSameAsEeprom);
         break;
       }
       case 3:
@@ -308,7 +315,6 @@ void loop()
     }
   }
 
-
   void writeStringToEEPROM(int address) 
   {
     if (rfidValue.length() > EEPROM_LENGTH) 
@@ -320,9 +326,7 @@ void loop()
     {
       EEPROM.write(address + i, rfidValue[i]);
     }
-    
     EEPROM.write(address + rfidValue.length(), '\0');
-    //EEPROM.commit();
   }
 
   void ReadStringFromEEPROM(int address) 
@@ -340,9 +344,7 @@ void loop()
     }
     buffer[i] = '\0';
     rfidEeprom = String(buffer);
-    //return String(buffer);
   }
-
 
 //endregion
 
@@ -372,6 +374,32 @@ void loop()
 
 //region rfid
 
+  //this code will compare the scanned rfid tag 
+  //and will turn bools true if they are the same in the eeprom and web
+  void CompareRfid()
+  {
+    if(rfidValue == rfidWeb)
+    {
+      rifdSameAsWeb = true;
+    }
+    else
+    {
+      rifdSameAsWeb = false;
+    }
+
+
+    if(rfidValue == rfidEeprom)
+    {
+
+      rfidSameAsEeprom = true;
+    }
+    else
+    {
+      rfidSameAsEeprom = false;
+    }
+
+  }
+
   void DisplayRfid()
   {
     lcd.print("rfidValue:");
@@ -385,6 +413,10 @@ void loop()
     }
   }
 
+  //this code will display the following
+  // 0/A = main menu of the 
+  // 1/b = display value
+  // 2/c = 0 means it isnt equal 1 means its the same
   void DisplayWebRfid()
   {
     switch (SubKeyPadSelectIndex)
@@ -412,13 +444,14 @@ void loop()
       {
         lcd.print("A:BCK ");
         lcd.print("THIS=WEB:");
-        //rework
         lcd.print(rifdSameAsWeb);
         break;
       }
     }
   }
 
+  //this code will read the rfid card and save it 
+  //you can also save it in eeprom by going to eeprom->set->1 ( E->D->1 )
   void Rfid()
   {
     if(rfid.isCard())
@@ -436,6 +469,7 @@ void loop()
     }
     rfid.halt();
   }
+
 //endregion
 
 
@@ -548,6 +582,12 @@ void loop()
 
 //region messege handling
 
+  /*
+    this function will read the string of information that is send from the website
+    the reading process will always start by reading the first letter, then it will go through the array and look for a *
+    the string inside the beginning and the * will be varName. and the string inside * and ! is the value
+    then the prosess will then start again after the ! until there are no indexes in the string
+  */
   void parseString(String input)
   {
     int start = 0;
@@ -582,6 +622,9 @@ void loop()
     }
   }
 
+  //this code will read the response given by the website and prase it
+  //when the client is available the readSenors will be also true 
+  //so the program has enough time to handle the response
   void handleHttpResponce()
   {
     String readString; 
@@ -600,6 +643,7 @@ void loop()
     } 
   }
 
+  //this function will make a string that will be send out as a post
   void MakeMessege()
   {
     String tmpString = "temperature=";
