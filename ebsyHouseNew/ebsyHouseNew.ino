@@ -62,8 +62,8 @@ dht DHT;
 //endregion
 
 //region SensorValues
-  double temp;
-  double hum;
+  int temp;
+  int hum;
   int humCap = 80;
   #define DHT11_PIN 9
 //endregion
